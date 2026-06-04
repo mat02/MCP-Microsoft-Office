@@ -22,6 +22,7 @@ function getExternalTokenController() {
 // Load environment variables
 const CLIENT_ID = process.env.MICROSOFT_CLIENT_ID;
 const TENANT_ID = process.env.MICROSOFT_TENANT_ID || 'common';
+const CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET;
 const REDIRECT_URI = process.env.MICROSOFT_REDIRECT_URI || 'http://localhost:3000/api/auth/callback';
 // Use scopes that match the permissions granted in Azure AD
 const SCOPES = [
@@ -92,7 +93,7 @@ const msalConfig = {
     auth: {
         clientId: CLIENT_ID,
         authority: `https://login.microsoftonline.com/${TENANT_ID}`,
-        // NO clientSecret for public client
+        clientSecret: CLIENT_SECRET
     },
     system: { 
         loggerOptions: { 
@@ -148,7 +149,7 @@ if (process.env.NODE_ENV === 'development') {
     }, 'auth');
 }
 
-const pca = new msal.PublicClientApplication(msalConfig);
+const pca = new msal.ConfidentialClientApplication(msalConfig);
 
 // Generate PKCE code verifier and code challenge
 function generatePkceCodes() {
