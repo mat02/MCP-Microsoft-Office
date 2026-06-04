@@ -2,19 +2,23 @@ FROM node:20-bookworm-slim
 
 WORKDIR /app
 
+ENV DEBIAN_FRONTEND=noninteractive
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=3000
+ENV MCP_SILENT_MODE=true
+
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
+COPY scripts ./scripts
+COPY .env.example ./.env.example
+
 RUN npm ci --omit=dev
 
 COPY . .
-
-ENV NODE_ENV=production
-ENV HOST=0.0.0.0
-ENV PORT=3000
-ENV MCP_SILENT_MODE=true
 
 EXPOSE 3000
 
