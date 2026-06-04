@@ -13,6 +13,9 @@ const graphService = require('../graph/graph-service.cjs');
 const todoService = require('../graph/todo-service.cjs');
 const contactsService = require('../graph/contacts-service.cjs');
 const groupsService = require('../graph/groups-service.cjs');
+const excelService = require('../graph/excel-service.cjs');
+const wordService = require('../graph/word-service.cjs');
+const powerpointService = require('../graph/powerpoint-service.cjs');
 
 /**
  * Initializes all registered modules with provided dependencies/services.
