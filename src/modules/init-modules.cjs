@@ -174,7 +174,10 @@ async function initializeModules(services = {}, userId, sessionId) {
         graphService: graphService,
         todoService: todoService,
         contactsService: contactsService,
-        groupsService: groupsService
+        groupsService: groupsService,
+        excelService: excelService,
+        wordService: wordService,
+        powerpointService: powerpointService
     };
     
     // Log initialization start
