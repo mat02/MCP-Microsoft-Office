@@ -115,10 +115,11 @@ async function executeTool(toolName, args, req) {
     const userId = req.user?.userId || req.session?.msUser?.username;
     const deviceId = req.user?.deviceId;
     const sessionId = req.user?.sessionId || req.session?.id;
-    let moduleName, methodName, toolArgs;
+    let moduleName, methodName, intentName, toolArgs;
 
     if (toolName.includes('.')) {
         [moduleName, methodName] = toolName.split('.', 2);
+        intentName = methodName;
         toolArgs = args;
     } else {
         const transformResult = apiContext.toolsService.transformToolParameters(
@@ -134,6 +135,7 @@ async function executeTool(toolName, args, req) {
         }
 
         ({ moduleName, methodName } = transformResult.mapping);
+        intentName = toolName;
         toolArgs = transformResult.params || args;
     }
 
@@ -189,8 +191,8 @@ async function executeTool(toolName, args, req) {
         }
 
         if (typeof module.handleIntent === 'function') {
-            const intentParams = normalizeIntentParameters(moduleName, methodName, paramsWithToken);
-            result = await module.handleIntent(methodName, intentParams, executionContext, userId, sessionId);
+            const intentParams = normalizeIntentParameters(moduleName, intentName, paramsWithToken);
+            result = await module.handleIntent(intentName, intentParams, executionContext, userId, sessionId);
         } else if (typeof module[methodName] === 'function') {
             // Direct method fallback for modules that do not implement handleIntent dispatch.
             result = await module[methodName].call(module, paramsWithToken, req);
