@@ -54,57 +54,87 @@ function formatToolsForMCP(tools) {
 }
 
 /**
+ * Adapt MCP-facing schemas to module handleIntent parameter shapes.
+ */
+function normalizeIntentParameters(moduleName, methodName, params = {}) {
+    const normalized = { ...params };
+
+    if (moduleName === 'mail') {
+        if ((methodName === 'flagMail' || methodName === 'getMailAttachments') && !normalized.mailId) {
+            normalized.mailId = normalized.id;
+        }
+        if (methodName === 'readMail' && !normalized.count) {
+            normalized.count = normalized.limit || normalized.top;
+        }
+        if (methodName === 'addMailAttachment' && !normalized.attachment) {
+            const { name, contentBytes, contentType, isInline } = normalized;
+            normalized.attachment = { name, contentBytes, contentType, isInline };
+        }
+    }
+
+    if (moduleName === 'calendar') {
+        if (methodName === 'createEvent' && !normalized.event) {
+            normalized.event = { ...normalized };
+            delete normalized.event.accessToken;
+        }
+        if (methodName === 'updateEvent') {
+            normalized.eventId = normalized.eventId || normalized.id;
+            if (!normalized.updates) {
+                const { id, eventId, accessToken, ...updates } = normalized;
+                normalized.updates = updates;
+            }
+        }
+        if (['acceptEvent', 'tentativelyAcceptEvent', 'declineEvent', 'cancelEvent'].includes(methodName)) {
+            normalized.eventId = normalized.eventId || normalized.id;
+        }
+        if (methodName === 'findMeetingTimes' && !normalized.options) {
+            normalized.options = { ...normalized };
+            delete normalized.options.accessToken;
+        }
+    }
+
+    if (moduleName === 'people') {
+        if (methodName === 'findPeople' && !normalized.criteria) {
+            normalized.criteria = { ...normalized };
+            delete normalized.criteria.accessToken;
+        }
+        if (methodName === 'getPersonById' && !normalized.personId) {
+            normalized.personId = normalized.id;
+        }
+    }
+
+    return normalized;
+}
+
+/**
  * Execute a tool call via the existing API infrastructure
  */
 async function executeTool(toolName, args, req) {
     const startTime = Date.now();
 
-    // Parse tool name (format: module.method or just method)
-    let moduleName, methodName;
+    const userId = req.user?.userId || req.session?.msUser?.username;
+    const deviceId = req.user?.deviceId;
+    const sessionId = req.user?.sessionId || req.session?.id;
+    let moduleName, methodName, toolArgs;
+
     if (toolName.includes('.')) {
-        [moduleName, methodName] = toolName.split('.');
+        [moduleName, methodName] = toolName.split('.', 2);
+        toolArgs = args;
     } else {
-        // Try to determine module from tool name
-        const toolAliases = {
-            // Mail tools
-            getMail: { moduleName: 'mail', methodName: 'getInbox' },
-            getInbox: { moduleName: 'mail', methodName: 'getInbox' },
-            sendEmail: { moduleName: 'mail', methodName: 'sendEmail' },
-            sendMail: { moduleName: 'mail', methodName: 'sendEmail' },
-            searchEmails: { moduleName: 'mail', methodName: 'searchEmails' },
-            searchMail: { moduleName: 'mail', methodName: 'searchEmails' },
-            flagEmail: { moduleName: 'mail', methodName: 'flagEmail' },
-            getEmailDetails: { moduleName: 'mail', methodName: 'getEmailDetails' },
-            markAsRead: { moduleName: 'mail', methodName: 'markAsRead' },
+        const transformResult = apiContext.toolsService.transformToolParameters(
+            toolName,
+            args,
+            userId,
+            deviceId,
+            sessionId
+        );
 
-            // Calendar tools
-            getEvents: { moduleName: 'calendar', methodName: 'getEvents' },
-            getCalendar: { moduleName: 'calendar', methodName: 'getEvents' },
-            createEvent: { moduleName: 'calendar', methodName: 'create' },
-            updateEvent: { moduleName: 'calendar', methodName: 'update' },
-            cancelEvent: { moduleName: 'calendar', methodName: 'cancelEvent' },
-            getAvailability: { moduleName: 'calendar', methodName: 'getAvailability' },
-            findMeetingTimes: { moduleName: 'calendar', methodName: 'findMeetingTimes' },
-
-            // Files tools
-            listFiles: { moduleName: 'files', methodName: 'listFiles' },
-            searchFiles: { moduleName: 'files', methodName: 'searchFiles' },
-            downloadFile: { moduleName: 'files', methodName: 'downloadFile' },
-            uploadFile: { moduleName: 'files', methodName: 'uploadFile' },
-            getFileMetadata: { moduleName: 'files', methodName: 'getFileMetadata' },
-
-            // People tools
-            findPeople: { moduleName: 'people', methodName: 'find' },
-            getRelevantPeople: { moduleName: 'people', methodName: 'getRelevantPeople' }
-        };
-
-        const alias = toolAliases[toolName];
-        if (alias) {
-            moduleName = alias.moduleName;
-            methodName = alias.methodName;
-        } else {
+        if (!transformResult?.mapping) {
             throw new Error(`Unknown tool: ${toolName}`);
         }
+
+        ({ moduleName, methodName } = transformResult.mapping);
+        toolArgs = transformResult.params || args;
     }
 
     MonitoringService.info('Executing MCP tool via SSE transport', {
@@ -113,12 +143,6 @@ async function executeTool(toolName, args, req) {
         methodName,
         timestamp: new Date().toISOString()
     }, 'mcp-transport');
-
-    // Get the module from registry
-    const module = apiContext.moduleRegistry.getModule(moduleName);
-    if (!module) {
-        throw new Error(`Module not found: ${moduleName}`);
-    }
 
     // Get Microsoft Graph access token
     // For SSE connections with Bearer token, we need to fetch the Graph token
@@ -148,15 +172,32 @@ async function executeTool(toolName, args, req) {
         throw new Error('No valid Microsoft Graph access token available. Please re-authenticate.');
     }
 
-    // Execute the module method
-    if (typeof module[methodName] !== 'function') {
-        throw new Error(`Method not found: ${moduleName}.${methodName}`);
-    }
+    const executionContext = { req, userId, deviceId, sessionId };
+    const paramsWithToken = { ...toolArgs, accessToken };
+    let result;
 
-    // Call the handler with args, access token, and request object
-    // Module methods expect (options, req) signature for proper authentication context
-    // IMPORTANT: Use .call() to preserve 'this' binding for module methods
-    const result = await module[methodName].call(module, { ...args, accessToken }, req);
+    if (moduleName === 'query' && methodName === 'processQuery') {
+        if (!apiContext.nluAgent || typeof apiContext.nluAgent.processQuery !== 'function') {
+            throw new Error('Method not found: query.processQuery');
+        }
+        result = await apiContext.nluAgent.processQuery(paramsWithToken, executionContext, userId, sessionId);
+    } else {
+        // Get the module from registry
+        const module = apiContext.moduleRegistry.getModule(moduleName);
+        if (!module) {
+            throw new Error(`Module not found: ${moduleName}`);
+        }
+
+        if (typeof module.handleIntent === 'function') {
+            const intentParams = normalizeIntentParameters(moduleName, methodName, paramsWithToken);
+            result = await module.handleIntent(methodName, intentParams, executionContext, userId, sessionId);
+        } else if (typeof module[methodName] === 'function') {
+            // Direct method fallback for modules that do not implement handleIntent dispatch.
+            result = await module[methodName].call(module, paramsWithToken, req);
+        } else {
+            throw new Error(`Method not found: ${moduleName}.${methodName}`);
+        }
+    }
 
     MonitoringService.info('MCP tool executed successfully', {
         toolName,
