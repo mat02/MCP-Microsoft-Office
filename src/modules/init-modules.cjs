@@ -10,6 +10,12 @@ const ErrorService = require('../core/error-service.cjs');
 const StorageService = require('../core/storage-service.cjs');
 const { databaseFactory } = require('../core/database-factory.cjs');
 const graphService = require('../graph/graph-service.cjs');
+const mailService = require('../graph/mail-service.cjs');
+const calendarService = require('../graph/calendar-service.cjs');
+const filesService = require('../graph/files-service.cjs');
+const peopleService = require('../graph/people-service.cjs');
+const searchService = require('../graph/search-service.cjs');
+const teamsService = require('../graph/teams-service.cjs');
 const todoService = require('../graph/todo-service.cjs');
 const contactsService = require('../graph/contacts-service.cjs');
 const groupsService = require('../graph/groups-service.cjs');
@@ -172,6 +178,12 @@ async function initializeModules(services = {}, userId, sessionId) {
         storageService: StorageService,
         databaseFactory: databaseFactory,
         graphService: graphService,
+        mailService: mailService,
+        calendarService: calendarService,
+        filesService: filesService,
+        peopleService: peopleService,
+        searchService: searchService,
+        teamsService: teamsService,
         todoService: todoService,
         contactsService: contactsService,
         groupsService: groupsService,
@@ -220,6 +232,12 @@ async function initializeModules(services = {}, userId, sessionId) {
     }
     
     const modules = moduleRegistry.getAllModules();
+    const moduleGraphServices = {
+        mail: mailService,
+        calendar: calendarService,
+        files: filesService,
+        people: peopleService
+    };
     const initialized = [];
     for (const mod of modules) {
         if (mod && typeof mod.init === 'function') {
@@ -235,8 +253,14 @@ async function initializeModules(services = {}, userId, sessionId) {
                     }, 'modules');
                 }
                 
+                // Some modules expect their domain service under the generic graphService key.
+                const moduleServices = {
+                    ...enrichedServices,
+                    graphService: moduleGraphServices[mod.id] || enrichedServices.graphService
+                };
+
                 // Call the module's init function with the services
-                const initializedModule = await mod.init(enrichedServices);
+                const initializedModule = await mod.init(moduleServices);
 
                 // Replace the module in the registry with the initialized instance
                 // Use updateModule to avoid "already registered" errors
