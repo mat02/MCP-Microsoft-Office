@@ -118,26 +118,27 @@ async function executeTool(toolName, args, req) {
     let moduleName, methodName, intentName, toolArgs;
 
     if (toolName.includes('.')) {
-        [moduleName, methodName] = toolName.split('.', 2);
-        intentName = methodName;
-        toolArgs = args;
-    } else {
-        const transformResult = apiContext.toolsService.transformToolParameters(
-            toolName,
-            args,
-            userId,
-            deviceId,
-            sessionId
+        throw new Error(
+            `Dotted tool names are not supported by remote MCP transport: ${toolName}. ` +
+            'Use the tool names returned by tools/list.'
         );
-
-        if (!transformResult?.mapping) {
-            throw new Error(`Unknown tool: ${toolName}`);
-        }
-
-        ({ moduleName, methodName } = transformResult.mapping);
-        intentName = toolName;
-        toolArgs = transformResult.params || args;
     }
+
+    const transformResult = apiContext.toolsService.transformToolParameters(
+        toolName,
+        args,
+        userId,
+        deviceId,
+        sessionId
+    );
+
+    if (!transformResult?.mapping) {
+        throw new Error(`Unknown tool: ${toolName}`);
+    }
+
+    ({ moduleName, methodName } = transformResult.mapping);
+    intentName = toolName;
+    toolArgs = transformResult.params || args;
 
     MonitoringService.info('Executing MCP tool via SSE transport', {
         toolName,
