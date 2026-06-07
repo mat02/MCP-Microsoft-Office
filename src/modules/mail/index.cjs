@@ -1951,6 +1951,12 @@ const MailModule = {
                     result = { type: 'mailSendResult', success: !!sent, sent };
                     break;
                 }
+                case 'replyToMail': {
+                    const { id, replyData } = entities;
+                    const replied = await graphService.replyToEmail(id, replyData || entities, context.req, userId, sessionId);
+                    result = { type: 'mailReplyResult', replied };
+                    break;
+                }
                 case 'flagMail': {
                     const { mailId, flag } = entities;
                     const flagged = await graphService.flagEmail(mailId, flag, context.req, userId, sessionId);

@@ -84,7 +84,8 @@ function normalizeSearchHit(hit, entityType) {
   const resource = hit.resource || {};
 
   const base = {
-    id: resource.id || hit.hitId,
+    id: resource.id || null,
+    hitId: hit.hitId || null,
     entityType,
     rank: hit.rank,
     summary: hit.summary || null
@@ -103,6 +104,7 @@ function normalizeSearchHit(hit, entityType) {
         bodyPreview: resource.bodyPreview?.substring(0, 200),
         hasAttachments: resource.hasAttachments,
         importance: resource.importance,
+        canOpenWithMailTools: !!resource.id,
         webLink: resource.webLink || buildOutlookItemUrl(resource.id)
       };
 

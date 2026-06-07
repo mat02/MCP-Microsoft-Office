@@ -60,8 +60,12 @@ function normalizeIntentParameters(moduleName, methodName, params = {}) {
     const normalized = { ...params };
 
     if (moduleName === 'mail') {
+        const mailId = normalized.id || normalized.mailId || normalized.messageId || normalized.emailId;
+        if (mailId && !normalized.id) {
+            normalized.id = mailId;
+        }
         if ((methodName === 'flagMail' || methodName === 'getMailAttachments') && !normalized.mailId) {
-            normalized.mailId = normalized.id;
+            normalized.mailId = mailId;
         }
         if (methodName === 'readMail' && !normalized.count) {
             normalized.count = normalized.limit || normalized.top;
@@ -69,6 +73,10 @@ function normalizeIntentParameters(moduleName, methodName, params = {}) {
         if (methodName === 'addMailAttachment' && !normalized.attachment) {
             const { name, contentBytes, contentType, isInline } = normalized;
             normalized.attachment = { name, contentBytes, contentType, isInline };
+        }
+        if (methodName === 'replyToMail' && !normalized.replyData) {
+            const { body, contentType, replyAll } = normalized;
+            normalized.replyData = { body, contentType, replyAll };
         }
     }
 
