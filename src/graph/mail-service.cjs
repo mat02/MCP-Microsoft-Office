@@ -56,6 +56,13 @@ function normalizeEmail(graphEmail) {
   };
 }
 
+function encodeGraphId(id) {
+  if (!id || typeof id !== 'string') {
+    return id;
+  }
+  return encodeURIComponent(id);
+}
+
 /**
  * Retrieves inbox emails.
  * @param {object} options
@@ -648,7 +655,8 @@ async function flagEmail(id, flag = true, req, userId, sessionId) {
     }
     
     const client = await graphClientFactory.createClient(req, contextUserId, contextSessionId);
-    await client.api(`/me/messages/${id}`, contextUserId, contextSessionId).patch({
+    const encodedId = encodeGraphId(id);
+    await client.api(`/me/messages/${encodedId}`, contextUserId, contextSessionId).patch({
       flag: { flagStatus: flag ? 'flagged' : 'notFlagged' }
     });
     
@@ -771,7 +779,8 @@ async function getAttachments(id, req, userId, sessionId) {
     
     // First check if the email exists and has attachments
     try {
-      const emailDetails = await client.api(`/me/messages/${id}`).get();
+      const encodedId = encodeGraphId(id);
+      const emailDetails = await client.api(`/me/messages/${encodedId}`).get();
       
       if (process.env.NODE_ENV === 'development') {
         MonitoringService.debug('Email metadata retrieved for attachments check', {
@@ -801,7 +810,8 @@ async function getAttachments(id, req, userId, sessionId) {
     }
     
     // Use $select to ensure we get all attachment properties
-    const res = await client.api(`/me/messages/${id}/attachments`).get();
+    const encodedId = encodeGraphId(id);
+    const res = await client.api(`/me/messages/${encodedId}/attachments`).get();
     
     const attachments = res.value || [];
     
@@ -1051,7 +1061,8 @@ async function getEmailDetails(id, req, userId, sessionId) {
     }
     
     const client = await graphClientFactory.createClient(req, contextUserId, contextSessionId);
-    const message = await client.api(`/me/messages/${id}`, contextUserId, contextSessionId).get();
+    const encodedId = encodeGraphId(id);
+    const message = await client.api(`/me/messages/${encodedId}`, contextUserId, contextSessionId).get();
     
     if (!message) {
       const mcpError = ErrorService.createError(
@@ -1213,7 +1224,8 @@ async function markAsRead(id, isRead = true, req, userId, sessionId) {
     }
     
     const client = await graphClientFactory.createClient(req, contextUserId, contextSessionId);
-    await client.api(`/me/messages/${id}`, contextUserId, contextSessionId).patch({
+    const encodedId = encodeGraphId(id);
+    await client.api(`/me/messages/${encodedId}`, contextUserId, contextSessionId).patch({
       isRead: isRead
     });
     
@@ -1375,7 +1387,8 @@ async function addMailAttachment(messageId, attachment, req, userId, sessionId) 
     }, 'graph-mail-service');
     
     // Add the attachment to the message
-    const result = await client.api(`/me/messages/${messageId}/attachments`).post(attachmentData);
+    const encodedMessageId = encodeGraphId(messageId);
+    const result = await client.api(`/me/messages/${encodedMessageId}/attachments`).post(attachmentData);
     
     const executionTime = Date.now() - startTime;
     MonitoringService.trackMetric('graph_mail_add_attachment_success', executionTime, {
@@ -1491,7 +1504,7 @@ async function removeMailAttachment(messageId, attachmentId, req, userId, sessio
       messageId: messageId,
       attachmentId: attachmentId,
       encodedAttachmentId: encodeURIComponent(attachmentId),
-      apiPath: `/me/messages/${messageId}/attachments/${encodeURIComponent(attachmentId)}`,
+      apiPath: `/me/messages/${encodeGraphId(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
       timestamp: new Date().toISOString()
     }, 'graph-mail-service');
     
@@ -1502,13 +1515,14 @@ async function removeMailAttachment(messageId, attachmentId, req, userId, sessio
       messageId: messageId,
       attachmentId: attachmentId,
       encodedAttachmentId: encodedAttachmentId,
-      apiPath: `/me/messages/${messageId}/attachments/${encodedAttachmentId}`,
+      apiPath: `/me/messages/${encodeGraphId(messageId)}/attachments/${encodedAttachmentId}`,
       timestamp: new Date().toISOString()
     }, 'graph-mail-service');
     
     // Remove the attachment from the message
     try {
-      const deleteResponse = await client.api(`/me/messages/${messageId}/attachments/${encodedAttachmentId}`).delete();
+      const encodedMessageId = encodeGraphId(messageId);
+      const deleteResponse = await client.api(`/me/messages/${encodedMessageId}/attachments/${encodedAttachmentId}`).delete();
       MonitoringService.info('Graph API delete response received', {
         messageId: messageId,
         attachmentId: attachmentId,
@@ -1520,7 +1534,7 @@ async function removeMailAttachment(messageId, attachmentId, req, userId, sessio
         messageId: messageId,
         attachmentId: attachmentId,
         encodedAttachmentId: encodedAttachmentId,
-        apiPath: `/me/messages/${messageId}/attachments/${encodedAttachmentId}`,
+        apiPath: `/me/messages/${encodeGraphId(messageId)}/attachments/${encodedAttachmentId}`,
         error: graphError.message,
         statusCode: graphError.statusCode || graphError.code,
         errorDetails: graphError.body || graphError.response || graphError,
@@ -1558,7 +1572,7 @@ async function removeMailAttachment(messageId, attachmentId, req, userId, sessio
         messageId: messageId,
         attachmentId: attachmentId,
         encodedAttachmentId: encodeURIComponent(attachmentId),
-        apiPath: `/me/messages/${messageId}/attachments/${encodeURIComponent(attachmentId)}`,
+        apiPath: `/me/messages/${encodeGraphId(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
         graphError: error.code || 'unknown',
         graphMessage: error.message,
         stack: error.stack,
@@ -1638,8 +1652,8 @@ async function replyToEmail(messageId, replyData, req, userId, sessionId) {
 
     // Determine endpoint based on replyAll flag
     const endpoint = replyData.replyAll
-      ? `/me/messages/${messageId}/replyAll`
-      : `/me/messages/${messageId}/reply`;
+      ? `/me/messages/${encodeGraphId(messageId)}/replyAll`
+      : `/me/messages/${encodeGraphId(messageId)}/reply`;
 
     // Build the reply payload
     const payload = {
