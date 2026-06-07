@@ -366,7 +366,7 @@ function sanitizeString(str, userId, sessionId) {
         const sanitized = str
             .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') // Remove script tags
             .replace(/javascript:/gi, '') // Remove javascript: protocol
-            .replace(/on\w+\s*=/gi, '') // Remove event handlers like onclick=
+            .replace(/(^|[\s<])on\w+\s*=/gi, '$1') // Remove event handlers like onclick= without corrupting opaque IDs
             .replace(/data:text\/html/gi, '') // Remove data URLs with HTML
             .trim();
         
